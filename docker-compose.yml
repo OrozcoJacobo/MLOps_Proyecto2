@@ -1,5 +1,4 @@
 services:
-
   postgres:
     image: postgres:15
     container_name: mlops-postgres
@@ -29,6 +28,7 @@ services:
       - minio_data:/data
     networks:
       - mlops_network
+
   minio-init:
     image: minio/mc
     container_name: mlops-minio-init
@@ -36,17 +36,16 @@ services:
       - minio
     entrypoint: >
       /bin/sh -c "
-      sleep 5;
+      sleep 10;
       mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD};
       mc mb myminio/${MINIO_BUCKET_NAME} || true;
-      mc policy set public myminio/${MINIO_BUCKET_NAME};
       exit 0;
       "
     networks:
       - mlops_network
 
   mlflow:
-    image: ghcr.io/mlflow/mlflow:latest
+    image: ghcr.io/mlflow/mlflow:v2.15.1
     container_name: mlops-mlflow
     command: >
       mlflow server
@@ -62,7 +61,96 @@ services:
       - "5050:5000"
     depends_on:
       - postgres
-      - minio
+      - minio-init
+    networks:
+      - mlops_network
+
+  airflow-init:
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile
+    container_name: mlops-airflow-init
+    depends_on:
+      - postgres
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@postgres:5432/${AIRFLOW_DB}
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/include:/opt/airflow/include
+      - ./data:/opt/airflow/data
+    command: >
+      bash -c "
+      airflow db migrate &&
+      airflow users create
+      --username ${AIRFLOW_ADMIN_USER}
+      --password ${AIRFLOW_ADMIN_PASSWORD}
+      --firstname Admin
+      --lastname User
+      --role Admin
+      --email ${AIRFLOW_ADMIN_EMAIL}
+      || true
+      "
+    networks:
+      - mlops_network
+
+  airflow-webserver:
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile
+    container_name: mlops-airflow-webserver
+    depends_on:
+      - airflow-init
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@postgres:5432/${AIRFLOW_DB}
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/include:/opt/airflow/include
+      - ./data:/opt/airflow/data
+    command: bash -c "airflow webserver --workers 1 --worker-timeout 300"
+    networks:
+      - mlops_network
+
+  airflow-scheduler:
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile
+    container_name: mlops-airflow-scheduler
+    depends_on:
+      - airflow-init
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@postgres:5432/${AIRFLOW_DB}
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
+      MLFLOW_EXPERIMENT_NAME: ${MLFLOW_EXPERIMENT_NAME}
+      MLFLOW_MODEL_NAME: ${MLFLOW_MODEL_NAME}
+      MLFLOW_MODEL_ALIAS: ${MLFLOW_MODEL_ALIAS}
+
+      MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+
+      SOURCE_DATA_PATH: ${SOURCE_DATA_PATH}
+      BATCH_SIZE: ${BATCH_SIZE}
+      TARGET_COLUMN: ${TARGET_COLUMN}
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/include:/opt/airflow/include
+      - ./data:/opt/airflow/data
+    command: scheduler
     networks:
       - mlops_network
 
