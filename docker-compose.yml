@@ -1,0 +1,74 @@
+services:
+
+  postgres:
+    image: postgres:15
+    container_name: mlops-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+    networks:
+      - mlops_network
+
+  minio:
+    image: minio/minio:latest
+    container_name: mlops-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - mlops_network
+  minio-init:
+    image: minio/mc
+    container_name: mlops-minio-init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD};
+      mc mb myminio/${MINIO_BUCKET_NAME} || true;
+      mc policy set public myminio/${MINIO_BUCKET_NAME};
+      exit 0;
+      "
+    networks:
+      - mlops_network
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+    container_name: mlops-mlflow
+    command: >
+      mlflow server
+      --backend-store-uri postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      --default-artifact-root s3://${MINIO_BUCKET_NAME}
+      --host 0.0.0.0
+      --port 5000
+    environment:
+      MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+    ports:
+      - "5050:5000"
+    depends_on:
+      - postgres
+      - minio
+    networks:
+      - mlops_network
+
+volumes:
+  postgres_data:
+  minio_data:
+
+networks:
+  mlops_network:
