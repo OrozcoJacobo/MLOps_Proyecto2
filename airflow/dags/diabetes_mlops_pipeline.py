@@ -383,6 +383,10 @@ def diabetes_mlops_pipeline():
         from sklearn.pipeline import Pipeline
         from sklearn.preprocessing import OneHotEncoder
 
+
+        engine = create_engine(DB_URI)
+
+
         with engine.connect() as conn:
             total_features = conn.execute(
                 text("SELECT COUNT(*) FROM feature_store.model_features")
@@ -394,7 +398,7 @@ def diabetes_mlops_pipeline():
         mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
         mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
 
-        engine = create_engine(DB_URI)
+        
 
         query = """
             SELECT
@@ -418,7 +422,9 @@ def diabetes_mlops_pipeline():
         """
 
         with engine.connect() as conn:
-            df = pd.read_sql(text(query), conn)
+            rows = conn.execute(text(query)).mappings().all()
+
+        df = pd.DataFrame(rows)
 
         if df.empty:
             raise ValueError("No hay datos disponibles en feature_store.model_features.")
