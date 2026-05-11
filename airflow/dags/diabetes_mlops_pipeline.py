@@ -19,6 +19,11 @@ POSTGRES_DB = os.getenv("POSTGRES_DB", "mlops_diabetes")
 POSTGRES_USER = os.getenv("POSTGRES_USER", "mlops_user")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "mlops_password")
 
+MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
+MLFLOW_EXPERIMENT_NAME = os.getenv("MLFLOW_EXPERIMENT_NAME", "diabetes-readmission")
+MLFLOW_MODEL_NAME = os.getenv("MLFLOW_MODEL_NAME", "diabetes-readmission-model")
+MLFLOW_MODEL_ALIAS = os.getenv("MLFLOW_MODEL_ALIAS", "champion")
+
 DB_URI = (
     f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}"
     f"@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
@@ -72,7 +77,7 @@ def diabetes_mlops_pipeline():
     @task
     def load_raw_batch(file_info: dict, batch_window: dict) -> dict:
         if not batch_window["has_new_data"]:
-            return batch_window
+            return {"batch_id": None, "records_loaded": 0}
 
         df = pd.read_csv(file_info["source_path"])
         batch_df = df.iloc[batch_window["start_row"]:batch_window["end_row"]].copy()
@@ -125,10 +130,11 @@ def diabetes_mlops_pipeline():
 
     @task
     def process_raw_batch(raw_result: dict) -> dict:
-        if not raw_result.get("batch_id"):
-            return {"processed_records": 0, "message": "No hubo batch nuevo para procesar."}
+        batch_id = raw_result.get("batch_id")
 
-        batch_id = raw_result["batch_id"]
+        if not batch_id:
+            return {"batch_id": None, "processed_records": 0}
+
         engine = create_engine(DB_URI)
 
         with engine.begin() as conn:
@@ -249,10 +255,11 @@ def diabetes_mlops_pipeline():
 
     @task
     def build_feature_store(process_result: dict) -> dict:
-        if process_result.get("processed_records", 0) == 0:
-            return {"features_created": 0}
+        batch_id = process_result.get("batch_id")
 
-        batch_id = process_result["batch_id"]
+        if not batch_id or process_result.get("processed_records", 0) == 0:
+            return {"batch_id": batch_id, "features_created": 0}
+
         engine = create_engine(DB_URI)
 
         with engine.begin() as conn:
@@ -268,11 +275,8 @@ def diabetes_mlops_pipeline():
         feature_records = []
 
         for row in processed_rows:
-
             def safe_int(value):
-                if value is None:
-                    return 0
-                return int(value)
+                return 0 if value is None else int(value)
 
             age_raw = row["age"]
             age_midpoint = None
@@ -365,11 +369,220 @@ def diabetes_mlops_pipeline():
 
         return {"batch_id": batch_id, "features_created": len(feature_records)}
 
+    @task
+    def train_model(feature_result: dict) -> dict:
+        import mlflow
+        import mlflow.sklearn
+        from mlflow.tracking import MlflowClient
+
+        from sklearn.compose import ColumnTransformer
+        from sklearn.ensemble import RandomForestClassifier
+        from sklearn.impute import SimpleImputer
+        from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+        from sklearn.model_selection import train_test_split
+        from sklearn.pipeline import Pipeline
+        from sklearn.preprocessing import OneHotEncoder
+
+        with engine.connect() as conn:
+            total_features = conn.execute(
+                text("SELECT COUNT(*) FROM feature_store.model_features")
+            ).scalar()
+
+        if total_features == 0:
+            return {"message": "No hay features disponibles para entrenar."}
+
+        mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+        mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
+
+        engine = create_engine(DB_URI)
+
+        query = """
+            SELECT
+                age_midpoint,
+                gender,
+                race,
+                time_in_hospital,
+                num_lab_procedures,
+                num_procedures,
+                num_medications,
+                number_outpatient,
+                number_emergency,
+                number_inpatient,
+                number_diagnoses,
+                total_previous_visits,
+                medication_intensity,
+                diabetes_med_flag,
+                readmitted_flag
+            FROM feature_store.model_features
+            WHERE readmitted_flag IS NOT NULL
+        """
+
+        with engine.connect() as conn:
+            df = pd.read_sql(text(query), conn)
+
+        if df.empty:
+            raise ValueError("No hay datos disponibles en feature_store.model_features.")
+
+        X = df.drop(columns=["readmitted_flag"])
+        y = df["readmitted_flag"]
+
+        categorical_features = ["gender", "race"]
+        numerical_features = [
+            "age_midpoint",
+            "time_in_hospital",
+            "num_lab_procedures",
+            "num_procedures",
+            "num_medications",
+            "number_outpatient",
+            "number_emergency",
+            "number_inpatient",
+            "number_diagnoses",
+            "total_previous_visits",
+            "medication_intensity",
+            "diabetes_med_flag",
+        ]
+
+        X_train, X_test, y_train, y_test = train_test_split(
+            X,
+            y,
+            test_size=0.2,
+            random_state=42,
+            stratify=y,
+        )
+
+        numeric_transformer = Pipeline(
+            steps=[
+                ("imputer", SimpleImputer(strategy="median")),
+            ]
+        )
+
+        categorical_transformer = Pipeline(
+            steps=[
+                ("imputer", SimpleImputer(strategy="most_frequent")),
+                ("encoder", OneHotEncoder(handle_unknown="ignore")),
+            ]
+        )
+
+        preprocessor = ColumnTransformer(
+            transformers=[
+                ("num", numeric_transformer, numerical_features),
+                ("cat", categorical_transformer, categorical_features),
+            ]
+        )
+
+        model = RandomForestClassifier(
+            n_estimators=30,
+            max_depth=10,
+            random_state=42,
+            class_weight="balanced",
+            n_jobs=-1,
+        )
+
+        pipeline = Pipeline(
+            steps=[
+                ("preprocessor", preprocessor),
+                ("model", model),
+            ]
+        )
+
+        with mlflow.start_run(run_name="random_forest_diabetes_readmission") as run:
+            pipeline.fit(X_train, y_train)
+            y_pred = pipeline.predict(X_test)
+
+            accuracy = accuracy_score(y_test, y_pred)
+            precision = precision_score(y_test, y_pred, zero_division=0)
+            recall = recall_score(y_test, y_pred, zero_division=0)
+            f1 = f1_score(y_test, y_pred, zero_division=0)
+
+            mlflow.log_param("model_type", "RandomForestClassifier")
+            mlflow.log_param("n_estimators", 100)
+            mlflow.log_param("class_weight", "balanced")
+            mlflow.log_param("train_size", len(X_train))
+            mlflow.log_param("test_size", len(X_test))
+
+            mlflow.log_metric("accuracy", accuracy)
+            mlflow.log_metric("precision", precision)
+            mlflow.log_metric("recall", recall)
+            mlflow.log_metric("f1_score", f1)
+
+            mlflow.sklearn.log_model(
+                sk_model=pipeline,
+                artifact_path="model",
+                registered_model_name=MLFLOW_MODEL_NAME,
+            )
+
+            client = MlflowClient()
+            model_versions = client.search_model_versions(
+                f"name='{MLFLOW_MODEL_NAME}'"
+            )
+
+            current_version = None
+            for version in model_versions:
+                if version.run_id == run.info.run_id:
+                    current_version = version.version
+                    break
+
+            if current_version is not None:
+                client.set_registered_model_alias(
+                    name=MLFLOW_MODEL_NAME,
+                    alias=MLFLOW_MODEL_ALIAS,
+                    version=current_version,
+                )
+
+            insert_sql = text("""
+                INSERT INTO monitoring.model_training_runs (
+                    run_id,
+                    model_name,
+                    train_size,
+                    test_size,
+                    accuracy,
+                    precision_score,
+                    recall_score,
+                    f1_score
+                )
+                VALUES (
+                    :run_id,
+                    :model_name,
+                    :train_size,
+                    :test_size,
+                    :accuracy,
+                    :precision_score,
+                    :recall_score,
+                    :f1_score
+                )
+            """)
+
+            with engine.begin() as conn:
+                conn.execute(
+                    insert_sql,
+                    {
+                        "run_id": run.info.run_id,
+                        "model_name": MLFLOW_MODEL_NAME,
+                        "train_size": len(X_train),
+                        "test_size": len(X_test),
+                        "accuracy": float(accuracy),
+                        "precision_score": float(precision),
+                        "recall_score": float(recall),
+                        "f1_score": float(f1),
+                    },
+                )
+
+            return {
+                "run_id": run.info.run_id,
+                "model_name": MLFLOW_MODEL_NAME,
+                "model_version": current_version,
+                "accuracy": float(accuracy),
+                "precision": float(precision),
+                "recall": float(recall),
+                "f1_score": float(f1),
+            }
+
     file_info = validate_source_file()
     batch_window = get_next_batch_window(file_info)
     raw_result = load_raw_batch(file_info, batch_window)
     process_result = process_raw_batch(raw_result)
-    build_feature_store(process_result)
+    feature_result = build_feature_store(process_result)
+    train_model(feature_result)
 
 
 diabetes_mlops_pipeline()

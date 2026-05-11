@@ -45,7 +45,9 @@ services:
       - mlops_network
 
   mlflow:
-    image: ghcr.io/mlflow/mlflow:v2.15.1
+    build:
+      context: ./mlflow
+      dockerfile: Dockerfile
     container_name: mlops-mlflow
     command: >
       mlflow server
