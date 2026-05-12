@@ -201,6 +201,20 @@ services:
     networks:
       - mlops_network
 
+  locust:
+    build:
+      context: ./locust
+      dockerfile: Dockerfile
+    container_name: mlops-locust
+    environment:
+      LOCUST_HOST: http://api:8000
+    ports:
+      - "8089:8089"
+    depends_on:
+      - api
+    networks:
+      - mlops_network
+
 volumes:
   postgres_data:
   minio_data:

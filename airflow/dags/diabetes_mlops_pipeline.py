@@ -45,6 +45,7 @@ def diabetes_mlops_pipeline():
             raise FileNotFoundError(f"No existe el archivo fuente: {SOURCE_DATA_PATH}")
 
         df_preview = pd.read_csv(SOURCE_DATA_PATH, nrows=5)
+
         required_columns = {"encounter_id", "patient_nbr", "readmitted"}
         missing_columns = required_columns - set(df_preview.columns)
 
@@ -126,7 +127,10 @@ def diabetes_mlops_pipeline():
         with engine.begin() as conn:
             conn.execute(insert_sql, records)
 
-        return {"batch_id": batch_id, "records_loaded": len(records)}
+        return {
+            "batch_id": batch_id,
+            "records_loaded": len(records),
+        }
 
     @task
     def process_raw_batch(raw_result: dict) -> dict:
@@ -251,7 +255,10 @@ def diabetes_mlops_pipeline():
             conn.execute(insert_processed_sql, processed_records)
             conn.execute(insert_monitoring_sql, {"batch_id": batch_id})
 
-        return {"batch_id": batch_id, "processed_records": len(processed_records)}
+        return {
+            "batch_id": batch_id,
+            "processed_records": len(processed_records),
+        }
 
     @task
     def build_feature_store(process_result: dict) -> dict:
@@ -275,6 +282,7 @@ def diabetes_mlops_pipeline():
         feature_records = []
 
         for row in processed_rows:
+
             def safe_int(value):
                 return 0 if value is None else int(value)
 
@@ -367,7 +375,10 @@ def diabetes_mlops_pipeline():
         with engine.begin() as conn:
             conn.execute(insert_sql, feature_records)
 
-        return {"batch_id": batch_id, "features_created": len(feature_records)}
+        return {
+            "batch_id": batch_id,
+            "features_created": len(feature_records),
+        }
 
     @task
     def train_model(feature_result: dict) -> dict:
@@ -383,9 +394,7 @@ def diabetes_mlops_pipeline():
         from sklearn.pipeline import Pipeline
         from sklearn.preprocessing import OneHotEncoder
 
-
         engine = create_engine(DB_URI)
-
 
         with engine.connect() as conn:
             total_features = conn.execute(
@@ -397,8 +406,6 @@ def diabetes_mlops_pipeline():
 
         mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
         mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
-
-        
 
         query = """
             SELECT
@@ -433,6 +440,7 @@ def diabetes_mlops_pipeline():
         y = df["readmitted_flag"]
 
         categorical_features = ["gender", "race"]
+
         numerical_features = [
             "age_midpoint",
             "time_in_hospital",
@@ -481,7 +489,7 @@ def diabetes_mlops_pipeline():
             max_depth=10,
             random_state=42,
             class_weight="balanced",
-            n_jobs=-1,
+            n_jobs=1,
         )
 
         pipeline = Pipeline(
@@ -500,11 +508,26 @@ def diabetes_mlops_pipeline():
             recall = recall_score(y_test, y_pred, zero_division=0)
             f1 = f1_score(y_test, y_pred, zero_division=0)
 
+            with engine.connect() as conn:
+                best_previous_f1 = conn.execute(
+                    text("""
+                        SELECT COALESCE(MAX(f1_score), 0)
+                        FROM monitoring.model_training_runs
+                        WHERE promoted_to_champion = TRUE
+                    """)
+                ).scalar()
+
+            promote_to_champion = f1 >= float(best_previous_f1 or 0)
+
             mlflow.log_param("model_type", "RandomForestClassifier")
-            mlflow.log_param("n_estimators", 100)
+            mlflow.log_param("n_estimators", 30)
+            mlflow.log_param("max_depth", 10)
             mlflow.log_param("class_weight", "balanced")
             mlflow.log_param("train_size", len(X_train))
             mlflow.log_param("test_size", len(X_test))
+            mlflow.log_param("promotion_metric", "f1_score")
+            mlflow.log_param("best_previous_f1", float(best_previous_f1 or 0))
+            mlflow.log_param("promoted_to_champion", promote_to_champion)
 
             mlflow.log_metric("accuracy", accuracy)
             mlflow.log_metric("precision", precision)
@@ -528,7 +551,7 @@ def diabetes_mlops_pipeline():
                     current_version = version.version
                     break
 
-            if current_version is not None:
+            if promote_to_champion and current_version is not None:
                 client.set_registered_model_alias(
                     name=MLFLOW_MODEL_NAME,
                     alias=MLFLOW_MODEL_ALIAS,
@@ -539,22 +562,26 @@ def diabetes_mlops_pipeline():
                 INSERT INTO monitoring.model_training_runs (
                     run_id,
                     model_name,
+                    model_version,
                     train_size,
                     test_size,
                     accuracy,
                     precision_score,
                     recall_score,
-                    f1_score
+                    f1_score,
+                    promoted_to_champion
                 )
                 VALUES (
                     :run_id,
                     :model_name,
+                    :model_version,
                     :train_size,
                     :test_size,
                     :accuracy,
                     :precision_score,
                     :recall_score,
-                    :f1_score
+                    :f1_score,
+                    :promoted_to_champion
                 )
             """)
 
@@ -564,12 +591,14 @@ def diabetes_mlops_pipeline():
                     {
                         "run_id": run.info.run_id,
                         "model_name": MLFLOW_MODEL_NAME,
+                        "model_version": str(current_version) if current_version else None,
                         "train_size": len(X_train),
                         "test_size": len(X_test),
                         "accuracy": float(accuracy),
                         "precision_score": float(precision),
                         "recall_score": float(recall),
                         "f1_score": float(f1),
+                        "promoted_to_champion": bool(promote_to_champion),
                     },
                 )
 
@@ -581,6 +610,8 @@ def diabetes_mlops_pipeline():
                 "precision": float(precision),
                 "recall": float(recall),
                 "f1_score": float(f1),
+                "best_previous_f1": float(best_previous_f1 or 0),
+                "promoted_to_champion": bool(promote_to_champion),
             }
 
     file_info = validate_source_file()

@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS monitoring.model_training_runs (
 
     run_id VARCHAR(255),
     model_name VARCHAR(255),
+    model_version VARCHAR(50),
 
     train_size INTEGER,
     test_size INTEGER,
@@ -88,9 +89,10 @@ CREATE TABLE IF NOT EXISTS monitoring.model_training_runs (
     recall_score FLOAT,
     f1_score FLOAT,
 
+    promoted_to_champion BOOLEAN DEFAULT FALSE,
+
     training_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-
 
 CREATE TABLE IF NOT EXISTS monitoring.inference_logs (
     id BIGSERIAL PRIMARY KEY,
