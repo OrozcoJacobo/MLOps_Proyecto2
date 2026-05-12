@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS raw.diabetes_raw (
     ingestion_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     source_file VARCHAR(255),
     row_hash VARCHAR(128),
+    status VARCHAR(20) DEFAULT 'loaded',
     raw_data JSONB
 );
 
@@ -108,4 +109,21 @@ CREATE TABLE IF NOT EXISTS monitoring.inference_logs (
     model_alias VARCHAR(100),
 
     response_time_ms FLOAT
+);
+
+CREATE TABLE IF NOT EXISTS monitoring.dataset_splits (
+    id BIGSERIAL PRIMARY KEY,
+
+    batch_id VARCHAR(100),
+
+    total_records INTEGER,
+    train_size INTEGER,
+    val_size INTEGER,
+    test_size INTEGER,
+
+    train_pct FLOAT,
+    val_pct FLOAT,
+    test_pct FLOAT,
+
+    split_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
