@@ -379,6 +379,71 @@ def diabetes_mlops_pipeline():
             "batch_id": batch_id,
             "features_created": len(feature_records),
         }
+    @task
+    def split_dataset(feature_result: dict) -> dict:
+        batch_id = feature_result.get("batch_id")
+
+        if not batch_id or feature_result.get("features_created", 0) == 0:
+            return {"batch_id": batch_id, "train_size": 0, "val_size": 0, "test_size": 0}
+
+        engine = create_engine(DB_URI)
+
+        with engine.connect() as conn:
+            total = conn.execute(
+                text("SELECT COUNT(*) FROM feature_store.model_features WHERE readmitted_flag IS NOT NULL")
+            ).scalar()
+
+        total = int(total or 0)
+
+        if total == 0:
+            raise ValueError("No hay features disponibles para hacer split.")
+
+        train_size = int(total * 0.70)
+        val_size = int(total * 0.15)
+        test_size = total - train_size - val_size
+
+        insert_sql = text("""
+            INSERT INTO monitoring.dataset_splits (
+                batch_id,
+                total_records,
+                train_size,
+                val_size,
+                test_size,
+                train_pct,
+                val_pct,
+                test_pct
+            )
+            VALUES (
+                :batch_id,
+                :total_records,
+                :train_size,
+                :val_size,
+                :test_size,
+                :train_pct,
+                :val_pct,
+                :test_pct
+            )
+        """)
+
+        with engine.begin() as conn:
+            conn.execute(insert_sql, {
+                "batch_id": batch_id,
+                "total_records": total,
+                "train_size": train_size,
+                "val_size": val_size,
+                "test_size": test_size,
+                "train_pct": round(train_size / total * 100, 2),
+                "val_pct": round(val_size / total * 100, 2),
+                "test_pct": round(test_size / total * 100, 2),
+            })
+
+        return {
+            "batch_id": batch_id,
+            "total_records": total,
+            "train_size": train_size,
+            "val_size": val_size,
+            "test_size": test_size,
+        }
 
     @task
     def train_model(feature_result: dict) -> dict:
@@ -619,7 +684,8 @@ def diabetes_mlops_pipeline():
     raw_result = load_raw_batch(file_info, batch_window)
     process_result = process_raw_batch(raw_result)
     feature_result = build_feature_store(process_result)
-    train_model(feature_result)
+    split_result = split_dataset(feature_result)
+    train_model(split_result)
 
 
 diabetes_mlops_pipeline()
