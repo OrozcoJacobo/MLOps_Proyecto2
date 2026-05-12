@@ -8,6 +8,7 @@ from typing import Optional
 import mlflow.pyfunc
 import pandas as pd
 from fastapi import FastAPI
+from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, text
 
@@ -40,6 +41,9 @@ app = FastAPI(
     description="API de inferencia para modelo de readmisión hospitalaria usando MLflow.",
     version="0.1.0",
 )
+
+# Prometheus metrics
+Instrumentator().instrument(app).expose(app)
 
 model = None
 model_uri = f"models:/{MLFLOW_MODEL_NAME}@{MLFLOW_MODEL_ALIAS}"
@@ -115,9 +119,6 @@ def predict(payload: PredictionRequest) -> PredictionResponse:
     predicted_class = int(prediction[0])
 
     probability = None
-
-    raw_model = getattr(model, "_model_impl", None)
-    sklearn_model = getattr(raw_model, "python_model", None)
 
     response_time_ms = round((time.time() - start_time) * 1000, 2)
 
