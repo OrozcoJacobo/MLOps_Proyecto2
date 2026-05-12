@@ -159,6 +159,34 @@ services:
     networks:
       - mlops_network
 
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: mlops-api
+    environment:
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI}
+      MLFLOW_MODEL_NAME: ${MLFLOW_MODEL_NAME}
+      MLFLOW_MODEL_ALIAS: ${MLFLOW_MODEL_ALIAS}
+
+      MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mlflow
+      - postgres
+      - minio
+    networks:
+      - mlops_network
+
 volumes:
   postgres_data:
   minio_data:

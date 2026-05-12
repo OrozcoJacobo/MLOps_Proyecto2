@@ -90,3 +90,20 @@ CREATE TABLE IF NOT EXISTS monitoring.model_training_runs (
 
     training_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+
+CREATE TABLE IF NOT EXISTS monitoring.inference_logs (
+    id BIGSERIAL PRIMARY KEY,
+
+    request_id VARCHAR(255),
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    input_data JSONB,
+    prediction VARCHAR(50),
+    probability FLOAT,
+
+    model_name VARCHAR(255),
+    model_alias VARCHAR(100),
+
+    response_time_ms FLOAT
+);
