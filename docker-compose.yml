@@ -187,6 +187,20 @@ services:
     networks:
       - mlops_network
 
+  streamlit:
+    build:
+      context: ./streamlit_app
+      dockerfile: Dockerfile
+    container_name: mlops-streamlit
+    environment:
+      API_BASE_URL: http://api:8000
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api
+    networks:
+      - mlops_network
+
 volumes:
   postgres_data:
   minio_data:
