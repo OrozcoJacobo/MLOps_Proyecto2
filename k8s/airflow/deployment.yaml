@@ -125,7 +125,7 @@ spec:
       containers:
         - name: airflow-scheduler
           image: jchapadockerhub/mlops-airflow:latest
-          command:
+          args:
             - scheduler
           env:
             - name: AIRFLOW_DB_USER
