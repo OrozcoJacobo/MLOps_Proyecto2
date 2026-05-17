@@ -34,8 +34,6 @@ spec:
           ports:
             - containerPort: 8080
           env:
-            - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
-              value: postgresql+psycopg2://$(AIRFLOW_DB_USER):$(AIRFLOW_DB_PASSWORD)@postgres:5432/$(AIRFLOW_DB)
             - name: AIRFLOW_DB_USER
               valueFrom:
                 secretKeyRef:
@@ -51,6 +49,8 @@ spec:
                 secretKeyRef:
                   name: airflow-secret
                   key: airflow-db
+            - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+              value: postgresql+psycopg2://$(AIRFLOW_DB_USER):$(AIRFLOW_DB_PASSWORD)@postgres:5432/$(AIRFLOW_DB)
             - name: AIRFLOW__CORE__EXECUTOR
               valueFrom:
                 configMapKeyRef:
@@ -128,8 +128,6 @@ spec:
           command:
             - scheduler
           env:
-            - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
-              value: postgresql+psycopg2://$(AIRFLOW_DB_USER):$(AIRFLOW_DB_PASSWORD)@postgres:5432/$(AIRFLOW_DB)
             - name: AIRFLOW_DB_USER
               valueFrom:
                 secretKeyRef:
@@ -145,6 +143,8 @@ spec:
                 secretKeyRef:
                   name: airflow-secret
                   key: airflow-db
+            - name: AIRFLOW__DATABASE__SQL_ALCHEMY_CONN
+              value: postgresql+psycopg2://$(AIRFLOW_DB_USER):$(AIRFLOW_DB_PASSWORD)@postgres:5432/$(AIRFLOW_DB)
             - name: AIRFLOW__CORE__EXECUTOR
               valueFrom:
                 configMapKeyRef:
