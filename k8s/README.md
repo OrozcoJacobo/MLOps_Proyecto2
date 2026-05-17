@@ -306,6 +306,7 @@ kubectl apply -f k8s/locust/service.yaml
 kubectl apply -f k8s/prometheus/configmap.yaml
 kubectl apply -f k8s/prometheus/deployment.yaml
 kubectl apply -f k8s/prometheus/service.yaml
+kubectl wait --for=condition=ready pod -l app=prometheus -n mlops --timeout=120s
 ```
 
 ![alt text](images/k8s_prometheus.png)
@@ -319,7 +320,12 @@ kubectl apply -f k8s/grafana/configmap.yaml
 kubectl apply -f k8s/grafana/pvc.yaml
 kubectl apply -f k8s/grafana/deployment.yaml
 kubectl apply -f k8s/grafana/service.yaml
+kubectl wait --for=condition=ready pod -l app=grafana -n mlops --timeout=120s
 ```
+
+![alt text](images/k8s_grafana.png)
+
+![alt text](images/k8s_grafana_dashboard.png)
 
 ---
 
@@ -359,11 +365,15 @@ kubectl get pods -n mlops
 
 Todos los pods deben estar en estado `Running`.
 
+![alt text](images/k8s_pods.png)
+
 ### 7.2. Estado de los servicios
 
 ```bash
 kubectl get services -n mlops
 ```
+
+![alt text](images/k8s_services.png)
 
 ### 7.3. Verificar métricas de la API
 
@@ -371,9 +381,13 @@ kubectl get services -n mlops
 curl http://localhost:8000/metrics
 ```
 
+![alt text](images/k8s_API_metrics.png)
+
 ### 7.4. Verificar que Prometheus recibe métricas
 
 Abrir `http://localhost:9090/targets` y confirmar que `mlops-api` aparece en estado `UP`.
+
+![alt text](images/k8s_prometheus_targets.png)
 
 ### 7.5. Verificar modelo champion
 
@@ -383,6 +397,19 @@ kubectl exec -n mlops $(kubectl get pod -n mlops -l app=postgres -o jsonpath="{.
   "SELECT run_id, model_version, f1_score, promoted_to_champion, training_timestamp FROM monitoring.model_training_runs ORDER BY training_timestamp DESC LIMIT 5;"
 ```
 
+Se realiza verificación posterior a tres ejecuciones del DAG en Airflow.
+
+![alt text](images/k8s_postgres_champion.png)
+
+Tres ejecuciones exitosas en Airflow.
+
+![alt text](images/k8s_airflow_runs.png)
+
+Worflow de última ejecución exitosa.
+
+![alt text](images/k8s_airflow_lastrun.png)
+
+
 ### 7.6. Verificar logs de inferencia
 
 ```bash
@@ -390,6 +417,10 @@ kubectl exec -n mlops $(kubectl get pod -n mlops -l app=postgres -o jsonpath="{.
   psql -U mlops_user -d mlops_diabetes -c \
   "SELECT request_id, prediction, response_time_ms, timestamp FROM monitoring.inference_logs ORDER BY timestamp DESC LIMIT 5;"
 ```
+
+Se realizan tres predicciones de prueba desde Streamlit.
+
+![alt text](images/k8s_postgres_inferencelog.png)
 
 ---
 
