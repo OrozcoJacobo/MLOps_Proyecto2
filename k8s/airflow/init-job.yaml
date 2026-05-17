@@ -54,18 +54,33 @@ spec:
                 secretKeyRef:
                   name: airflow-secret
                   key: airflow-secret-key
+            - name: AIRFLOW_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: airflow-secret
+                  key: airflow-admin-user
+            - name: AIRFLOW_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: airflow-secret
+                  key: airflow-admin-password
+            - name: AIRFLOW_ADMIN_EMAIL
+              valueFrom:
+                configMapKeyRef:
+                  name: airflow-config
+                  key: AIRFLOW_ADMIN_EMAIL
           command:
             - bash
             - -c
             - |
               airflow db migrate &&
               airflow users create \
-                --username $(AIRFLOW_ADMIN_USER) \
-                --password $(AIRFLOW_ADMIN_PASSWORD) \
+                --username $AIRFLOW_ADMIN_USER \
+                --password $AIRFLOW_ADMIN_PASSWORD \
                 --firstname Admin \
                 --lastname User \
                 --role Admin \
-                --email $(AIRFLOW_ADMIN_EMAIL) || true
+                --email $AIRFLOW_ADMIN_EMAIL || true
           envFrom:
             - secretRef:
                 name: airflow-secret
