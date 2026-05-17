@@ -17,6 +17,35 @@ kubectl cluster-info
 kubectl get nodes
 ```
 ![alt text](images/k8_ready.png)
+
+### 1.1. Sobre las imágenes en DockerHub
+ 
+Las imágenes propias del proyecto están publicadas en DockerHub bajo el usuario `jchapadockerhub`. Los manifiestos de Kubernetes las referencian directamente desde este registro, por lo que no es necesario construirlas localmente para desplegar el proyecto.
+ 
+Si se requiere reconstruir y publicar las imágenes (por ejemplo tras modificar el código fuente), ejecutar desde la raíz del proyecto:
+ 
+```bash
+docker login
+docker build -t jchapadockerhub/mlops-airflow:latest ./airflow && docker push jchapadockerhub/mlops-airflow:latest
+docker build -t jchapadockerhub/mlops-api:latest ./api && docker push jchapadockerhub/mlops-api:latest
+docker build -t jchapadockerhub/mlops-streamlit:latest ./streamlit_app && docker push jchapadockerhub/mlops-streamlit:latest
+docker build -t jchapadockerhub/mlops-locust:latest ./locust && docker push jchapadockerhub/mlops-locust:latest
+docker build -t jchapadockerhub/mlops-mlflow:latest ./mlflow && docker push jchapadockerhub/mlops-mlflow:latest
+```
+ 
+Las imágenes de terceros usadas directamente desde sus registros oficiales son:
+ 
+| Imagen | Registro | Uso |
+|---|---|---|
+| `postgres:15` | Docker Hub oficial | Base de datos principal |
+| `minio/minio:latest` | Docker Hub oficial | Almacenamiento de objetos |
+| `minio/mc:latest` | Docker Hub oficial | Inicialización del bucket |
+| `ghcr.io/mlflow/mlflow:v2.15.1` | GitHub Container Registry | Base para imagen MLflow |
+| `prom/prometheus:v2.53.0` | Docker Hub oficial | Recolección de métricas |
+| `grafana/grafana:11.1.0` | Docker Hub oficial | Visualización de métricas |
+| `busybox:1.36` | Docker Hub oficial | Init containers de espera |
+| `python:3.11-slim` | Docker Hub oficial | Job de carga del dataset |
+ 
 ---
 
 ## 2. Imágenes en DockerHub
@@ -493,6 +522,42 @@ kubectl apply -f k8s/grafana/
 - El dataset `diabetic_data.csv` no requiere carga manual. El Job `upload-dataset` lo descarga automáticamente desde Google Drive y lo sube al bucket `mlflow-artifacts` de MinIO. El DAG incluye la tarea `download_dataset` que descarga el archivo desde MinIO al pod del scheduler antes de iniciar el pipeline. Para que esto funcione correctamente, el Job `upload-dataset` debe completarse exitosamente antes de ejecutar el DAG. Verificar con `kubectl logs -n mlops job/upload-dataset`.
 - La API no carga el modelo hasta que exista un modelo con alias `champion` en MLflow. Ejecutar el DAG antes de levantar la API.
 - Bajo carga concurrente con Locust, la latencia puede aumentar porque cada predicción escribe síncronamente en PostgreSQL.
+
+## 10.1. Flujo del dataset
+ 
+El dataset `diabetic_data.csv` sigue este flujo automatizado dentro del clúster:
+ 
+```
+Google Drive (fuente externa)
+        ↓
+Job: upload-dataset
+(descarga el CSV y lo sube a MinIO)
+        ↓
+MinIO bucket: mlflow-artifacts
+s3://mlflow-artifacts/datasets/diabetic_data.csv
+        ↓
+DAG tarea: download_dataset
+(el scheduler descarga el CSV desde MinIO al pod)
+        ↓
+/opt/airflow/data/diabetic_data.csv
+(disponible localmente en el pod del scheduler)
+        ↓
+DAG tarea: validate_source_file
+(verifica existencia y columnas requeridas)
+        ↓
+DAG tarea: load_raw_batch
+(carga incremental de hasta 15.000 registros por ejecución)
+        ↓
+raw.diabetes_raw
+(almacenamiento en capa RAW de PostgreSQL)
+```
+ 
+**Consideraciones importantes:**
+ 
+- El Job `upload-dataset` debe completarse antes de ejecutar el DAG. Si el Job falla, verificar conectividad a Google Drive desde el clúster y revisar los logs con `kubectl logs -n mlops job/upload-dataset`.
+- La tarea `download_dataset` del DAG es idempotente: si el archivo ya existe en el pod no lo descarga nuevamente, evitando descargas redundantes en ejecuciones sucesivas.
+- Si el pod del scheduler se reinicia, la tarea `download_dataset` vuelve a descargar el archivo desde MinIO automáticamente en la siguiente ejecución del DAG.
+- El dataset no se versiona en Git. Su única fuente de verdad dentro del clúster es MinIO.
 
 ## 11. Errores encontrados y soluciones
  
