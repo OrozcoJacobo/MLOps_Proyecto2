@@ -109,8 +109,7 @@ Verificar
 kubectl get secrets -n mlops
 kubectl get configmaps -n mlops
 ```
-
-![alt text](images/k8s_n-s-cm 2.png)
+![alt text](images/k8s_n-s-cm%202.png)
 
 ### 4.3. PostgreSQL
 
