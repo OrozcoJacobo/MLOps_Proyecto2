@@ -4,6 +4,8 @@ metadata:
   name: airflow-dags
   namespace: mlops
 data:
+  .airflowignore: |
+    \..*
   diabetes_mlops_pipeline.py: |
     from __future__ import annotations
 

@@ -229,6 +229,12 @@ spec:
                 configMapKeyRef:
                   name: airflow-config
                   key: TARGET_COLUMN
+            - name: AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL
+              value: "30"
+            - name: AIRFLOW__CORE__DAG_IGNORE_FILE_SYNTAX
+              value: "glob"
+            - name: AIRFLOW__CORE__DAGS_FOLDER
+              value: /opt/airflow/dags
           volumeMounts:
             - name: dags
               mountPath: /opt/airflow/dags
