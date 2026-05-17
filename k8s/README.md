@@ -233,9 +233,20 @@ kubectl wait --for=condition=ready pod -l app=airflow-webserver -n mlops --timeo
 4. Activarlo y presionar `Trigger DAG`
 5. Esperar a que todas las tareas queden en verde
 
+
+Evidencias de ejecución exitosa
+
 ![alt text](images/k8s_airflow_dagtasks.png)
 
 ![alt text](images/k8s_airflow_dagexecution.png)
+
+Modelo en MINIO
+
+![alt text](images/k8s_minio_artifacts.png)
+
+Modelo en MLFLOW
+
+![alt text](images/k8s_mlflow_model.png)
 
 ### 4.8. API FastAPI
 
@@ -250,6 +261,18 @@ Esperar a que la API esté lista:
 ```bash
 kubectl wait --for=condition=ready pod -l app=api -n mlops --timeout=120s
 ```
+
+![alt text](images/k8s_API.png)
+
+Verificar
+
+```bash
+curl http://localhost:8000/health
+```
+
+![alt text](images/k8s_API_health.png)
+
+![alt text](images/k8s_API_2.png)
 
 ### 4.9. Streamlit
 
