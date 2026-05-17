@@ -434,7 +434,7 @@ Se realizan tres predicciones de prueba desde Streamlit.
 3. Iniciar la prueba
 4. Observar en Grafana `http://localhost:3000` cómo cambian las métricas en tiempo real
 
-Evidencia de prueba 1.
+Evidencia de pruebas:
 
 Locust
 
