@@ -213,6 +213,8 @@ kubectl apply -f k8s/airflow/deployment.yaml
 kubectl apply -f k8s/airflow/service.yaml
 ```
 
+![alt text](images/k8s_airflow.png)
+
 Esperar a que Airflow esté listo:
 
 ```bash
