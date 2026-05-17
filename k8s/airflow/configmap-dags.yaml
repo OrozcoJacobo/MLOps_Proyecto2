@@ -47,6 +47,36 @@ data:
     def diabetes_mlops_pipeline():
 
         @task
+        def download_dataset() -> dict:
+            import boto3
+
+            local_path = SOURCE_DATA_PATH
+            bucket = "mlflow-artifacts"
+            key = "datasets/diabetic_data.csv"
+
+            if os.path.exists(local_path):
+                print(f"Dataset ya existe en {local_path}, omitiendo descarga.")
+                return {"source_path": local_path}
+
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+
+            print(f"Descargando dataset desde MinIO s3://{bucket}/{key}...")
+
+            s3 = boto3.client(
+                "s3",
+                endpoint_url=os.getenv("MLFLOW_S3_ENDPOINT_URL", "http://minio:9000"),
+                aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", "minioadmin"),
+                aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "minioadmin"),
+            )
+
+            s3.download_file(bucket, key, local_path)
+
+            size_mb = os.path.getsize(local_path) / (1024 * 1024)
+            print(f"Dataset descargado correctamente: {size_mb:.1f} MB en {local_path}")
+
+            return {"source_path": local_path}
+            
+        @task
         def validate_source_file() -> dict:
             if not os.path.exists(SOURCE_DATA_PATH):
                 raise FileNotFoundError(f"No existe el archivo fuente: {SOURCE_DATA_PATH}")
@@ -449,6 +479,7 @@ data:
                     "promoted_to_champion": bool(promote_to_champion),
                 }
 
+        download_result = download_dataset()
         file_info = validate_source_file()
         batch_window = get_next_batch_window(file_info)
         raw_result = load_raw_batch(file_info, batch_window)
@@ -456,6 +487,8 @@ data:
         feature_result = build_feature_store(process_result)
         split_result = split_dataset(feature_result)
         train_model(split_result)
+
+        download_result >> file_info
 
 
     diabetes_mlops_pipeline()
