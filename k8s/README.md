@@ -434,6 +434,16 @@ Se realizan tres predicciones de prueba desde Streamlit.
 3. Iniciar la prueba
 4. Observar en Grafana `http://localhost:3000` cómo cambian las métricas en tiempo real
 
+Evidencia de prueba 1.
+
+Locust
+
+![alt text](images/k8s_locust_test1.png)
+
+Grafana
+
+![alt text](images/k8s_grafana_test1.png)
+
 ---
 
 ## 9. Comandos útiles de operación
@@ -459,7 +469,7 @@ kubectl rollout restart deployment/api -n mlops
 kubectl delete namespace mlops
 ```
 
-### Aplicar todos los manifiestos de una vez
+### Aplicar todos los manifiestos
 
 ```bash
 kubectl apply -f k8s/namespace.yaml
