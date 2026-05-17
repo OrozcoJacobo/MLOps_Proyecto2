@@ -103,7 +103,7 @@ kubectl apply -f k8s/configmaps/configmap.yaml
 
 ![alt text](images/k8s_n-s-cm.png)
 
-## Verificar
+Verificar
 
 ```bash
 kubectl get secrets -n mlops
@@ -131,7 +131,7 @@ kubectl wait --for=condition=ready pod -l app=postgres -n mlops --timeout=120s
 
 ![alt text](images/k8s_postgrescondition.png)
 
-## Verificar
+Verificar
 
 ```bash
 kubectl get pods -n mlops -l app=postgres
@@ -155,12 +155,35 @@ Esperar a que MinIO esté listo:
 kubectl wait --for=condition=ready pod -l app=minio -n mlops --timeout=120s
 ```
 
+![alt text](images/k8s_miniocondition.png)
+
 Ejecutar el job de inicialización del bucket:
 
 ```bash
 kubectl apply -f k8s/minio/init-job.yaml
 kubectl wait --for=condition=complete job/minio-init -n mlops --timeout=120s
 ```
+
+![alt text](images/k8s_minio_initbucket.png)
+
+Subir dataset:
+
+```bash
+kubectl apply -f k8s/minio/upload-dataset-job.yaml
+kubectl wait --for=condition=complete job/upload-dataset -n mlops --timeout=300s
+```
+
+![alt text](images/k8s_minio_datasetuploading.png)
+
+Verificar que el dataset se subió correctamente:
+
+```bash
+kubectl logs -n mlops job/upload-dataset
+```
+
+![alt text](images/k8s_minio_datasetuploaded.png)
+
+![alt text](images/k8s_minioconsole.png)
 
 ### 4.5. MLflow
 
@@ -170,11 +193,16 @@ kubectl apply -f k8s/mlflow/deployment.yaml
 kubectl apply -f k8s/mlflow/service.yaml
 ```
 
+![alt text](images/k8s_mlflow.png)
+
 Esperar a que MLflow esté listo:
 
 ```bash
 kubectl wait --for=condition=ready pod -l app=mlflow -n mlops --timeout=120s
 ```
+![alt text](images/k8s_mlflow_condition.png)
+
+![alt text](images/k8s_mlflow_console.png)
 
 ### 4.6. Airflow
 
