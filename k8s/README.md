@@ -282,6 +282,12 @@ kubectl apply -f k8s/streamlit/deployment.yaml
 kubectl apply -f k8s/streamlit/service.yaml
 ```
 
+![alt text](images/k8s_streamlit.png)
+
+![alt text](images/k8s_streamlit_home.png)
+
+![alt text](images/k8s_streamlit_prediction.png)
+
 ### 4.10. Locust
 
 ```bash
@@ -290,6 +296,10 @@ kubectl apply -f k8s/locust/deployment.yaml
 kubectl apply -f k8s/locust/service.yaml
 ```
 
+![alt text](images/k8s_locust.png)
+
+![alt text](images/k8s_locust_home.png)
+
 ### 4.11. Prometheus
 
 ```bash
@@ -297,6 +307,10 @@ kubectl apply -f k8s/prometheus/configmap.yaml
 kubectl apply -f k8s/prometheus/deployment.yaml
 kubectl apply -f k8s/prometheus/service.yaml
 ```
+
+![alt text](images/k8s_prometheus.png)
+
+![alt text](images/k8s_prometheus_home.png)
 
 ### 4.12. Grafana
 
