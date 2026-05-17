@@ -221,6 +221,10 @@ Esperar a que Airflow esté listo:
 kubectl wait --for=condition=ready pod -l app=airflow-webserver -n mlops --timeout=180s
 ```
 
+![alt text](images/k8s_airflow_webserver_condition.png)
+
+![alt text](images/k8s_airflow_console.png)
+
 ### 4.7. Ejecutar el DAG
 
 1. Abrir Airflow en `http://localhost:8081`
@@ -228,6 +232,10 @@ kubectl wait --for=condition=ready pod -l app=airflow-webserver -n mlops --timeo
 3. Buscar el DAG `diabetes_mlops_pipeline`
 4. Activarlo y presionar `Trigger DAG`
 5. Esperar a que todas las tareas queden en verde
+
+![alt text](images/k8s_airflow_dagtasks.png)
+
+![alt text](images/k8s_airflow_dagexecution.png)
 
 ### 4.8. API FastAPI
 
