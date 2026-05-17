@@ -16,7 +16,7 @@ Verificar que Kubernetes está activo:
 kubectl cluster-info
 kubectl get nodes
 ```
-
+![alt text](images/k8_ready.png)
 ---
 
 ## 2. Imágenes en DockerHub
@@ -28,6 +28,8 @@ kubectl get nodes
 | Streamlit | `jchapadockerhub/mlops-streamlit:latest` |
 | Locust | `jchapadockerhub/mlops-locust:latest` |
 | MLflow | `jchapadockerhub/mlops-mlflow:latest` |
+
+![alt text](images/dockerhub-images.png)
 
 ---
 
@@ -99,6 +101,17 @@ kubectl apply -f k8s/secrets/secrets.yaml
 kubectl apply -f k8s/configmaps/configmap.yaml
 ```
 
+![alt text](images/k8s_n-s-cm.png)
+
+## Verificar
+
+```bash
+kubectl get secrets -n mlops
+kubectl get configmaps -n mlops
+```
+
+![alt text](images/k8s_n-s-cm 2.png)
+
 ### 4.3. PostgreSQL
 
 ```bash
@@ -108,11 +121,23 @@ kubectl apply -f k8s/postgres/statefulset.yaml
 kubectl apply -f k8s/postgres/service.yaml
 ```
 
+![alt text](images/k8s_postgres.png)
+
 Esperar a que PostgreSQL esté listo:
 
 ```bash
 kubectl wait --for=condition=ready pod -l app=postgres -n mlops --timeout=120s
 ```
+
+![alt text](images/k8s_postgrescondition.png)
+
+## Verificar
+
+```bash
+kubectl get pods -n mlops -l app=postgres
+```
+
+![alt text](images/k8s_postgresverifying.png)
 
 ### 4.4. MinIO
 
@@ -121,6 +146,8 @@ kubectl apply -f k8s/minio/pvc.yaml
 kubectl apply -f k8s/minio/statefulset.yaml
 kubectl apply -f k8s/minio/service.yaml
 ```
+
+![alt text](images/k8s_minio.png)
 
 Esperar a que MinIO esté listo:
 
